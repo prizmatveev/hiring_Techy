@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { Handshake, Store, ShoppingBag, Building2, Users, ShieldCheck, Truck } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
@@ -64,7 +65,9 @@ export default function Home() {
           <p className="text-[#4A5568] text-lg max-w-xl">Find jobs that match your interests and abilities with a minimal, modern hiring experience.</p>
           <button className="btn-primary" onClick={() => document.getElementById("jobs")?.scrollIntoView({ behavior: "smooth" })}>Get Started</button>
         </div>
-        <div className="rounded-2xl border border-[var(--line)] bg-[#e5f2f4] min-h-[360px]" />
+        <div className="rounded-2xl border border-[var(--line)] bg-[#e5f2f4] min-h-[360px] overflow-hidden">
+          <Image src="/hero-placeholder.svg" alt="Hero image placeholder" width={720} height={420} className="h-full w-full object-cover" priority />
+        </div>
       </section>
 
       <section className="container -mt-8 relative z-10">
@@ -76,30 +79,7 @@ export default function Home() {
             );
           })}
         </div>
-        <div className="grid sm:grid-cols-2 gap-4">
-          {[
-            { icon: Store, title: 'Local Products', text: 'Curated selection of products from Jabalpur sellers' },
-            { icon: Users, title: 'Community First', text: 'Supporting local businesses and entrepreneurs' },
-            { icon: ShieldCheck, title: 'Secure Shopping', text: 'Safe transactions with Cash on Delivery' },
-            { icon: Truck, title: 'Fast Delivery', text: 'Quick delivery within Jabalpur city' },
-          ].map((item) => (
-            <div key={item.title} className="card p-6 text-center">
-              <div className="mx-auto mb-4 h-14 w-14 rounded-2xl bg-orange-50 text-orange-600 grid place-items-center"><item.icon size={24} /></div>
-              <h3 className="text-2xl font-semibold">{item.title}</h3>
-              <p className="text-zinc-500 mt-2">{item.text}</p>
-            </div>
-          ))}
-        </div>
       </section>
-
-      <section id="contact" className="container py-2">
-        <div className="grid md:grid-cols-3 gap-4">
-          <div className="card p-5"><p className="text-sm text-zinc-500">Email</p><p className="font-semibold break-all">aadiyandubey@gmail.com</p></div>
-          <div className="card p-5"><p className="text-sm text-zinc-500">Phone</p><p className="font-semibold">+917089152020</p></div>
-          <div className="card p-5"><p className="text-sm text-zinc-500">Address</p><p className="font-semibold">Jabalpur</p></div>
-        </div>
-      </section>
-
 
       <section id="jobs" className="container py-12 space-y-4">
         <div className="flex justify-end">
@@ -112,7 +92,6 @@ export default function Home() {
               <p className="text-sm text-zinc-600">{job.category} • {job.location} • {job.employmentType}</p>
             </div>
             <div className="flex items-center gap-2">
-              <button className="border rounded-lg px-3 py-2 text-sm hover:bg-zinc-50 transition" onClick={() => void loadJobs()}>Refresh Jobs</button>
               <Link href={`/jobs/${job.id}`} className="btn-primary text-sm">Apply Now</Link>
             </div>
           </motion.article>
