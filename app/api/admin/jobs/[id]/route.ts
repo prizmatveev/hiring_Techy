@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const data = await req.json();
-  return NextResponse.json(await prisma.job.update({ where: { id: params.id }, data }));
+  const data = (await req.json()) as Prisma.JobUpdateInput;
+  const updated = await prisma.job.update({ where: { id: params.id }, data });
+  return NextResponse.json(updated);
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
@@ -16,8 +18,10 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     });
 
     if (relatedApps.length > 0) {
+      const applicationIds = relatedApps.map((application) => application.id);
+
       await tx.adminNotes.deleteMany({
-        where: { applicationId: { in: relatedApps.map((a) => a.id) } },
+        where: { applicationId: { in: applicationIds } },
       });
 
       await tx.application.deleteMany({ where: { jobId } });

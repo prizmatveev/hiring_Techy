@@ -68,7 +68,26 @@ export default function AdminDashboard() {
     if (appsRes.ok) setApplications(await appsRes.json());
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+
+    const intervalId = window.setInterval(() => {
+      void load();
+    }, 5000);
+
+    const handleFocus = () => {
+      void load();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, []);
 
   const filteredApplications = useMemo(() => applications.filter((a) => {
     const q = query.toLowerCase();
@@ -129,7 +148,10 @@ export default function AdminDashboard() {
   const visibleSkillSuggestions = skillSuggestions.filter((s) => !currentSkillTokens.includes(s)).slice(0, 8);
 
   return <main className="container py-10 space-y-6">
-    <h1 className="text-3xl font-semibold">Admin Dashboard</h1>
+    <div className="flex items-center justify-between gap-3">
+      <h1 className="text-3xl font-semibold">Admin Dashboard</h1>
+      <button className="border rounded-lg px-3 py-2 text-sm" onClick={() => void load()}>Refresh</button>
+    </div>
     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <div className="card p-4">Total applications: {applications.length}</div>
       <div className="card p-4">Open positions: {jobs.filter((j) => j.isOpen).length}</div>
