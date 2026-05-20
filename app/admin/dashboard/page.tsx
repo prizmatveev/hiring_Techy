@@ -160,9 +160,15 @@ export default function AdminDashboard() {
 
   const resolveResumeUrl = (resume: string) => {
     if (!resume) return "#";
-    if (resume.startsWith("http://") || resume.startsWith("https://") || resume.startsWith("/")) return resume;
-    if (resume.includes("/")) return `/${resume}`;
-    return `/uploads/resumes/${resume}`;
+
+    if (resume.startsWith("http://") || resume.startsWith("https://")) return resume;
+
+    const normalized = resume.trim().replace(/\\/g, "/").replace(/^\.\//, "").replace(/^public\//, "");
+
+    if (normalized.startsWith("/")) return normalized;
+    if (normalized.startsWith("uploads/")) return `/${normalized}`;
+
+    return `/uploads/resumes/${normalized.split("/").pop() ?? normalized}`;
   };
 
 
