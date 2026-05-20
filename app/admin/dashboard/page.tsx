@@ -50,6 +50,8 @@ export default function AdminDashboard() {
   const [categories, setCategories] = useState<string[]>(defaultCategories);
   const [skillSuggestions, setSkillSuggestions] = useState<string[]>([]);
   const [skillInput, setSkillInput] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [isSavingNote, setIsSavingNote] = useState(false);
 
   const load = async () => {
     const [jobsResult, appsResult] = await Promise.allSettled([
@@ -229,7 +231,7 @@ export default function AdminDashboard() {
             }}>
               {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button className="border rounded px-2" onClick={() => setSelected(a)}>Profile</button>
+            <button className="border rounded px-2" onClick={() => { setSelected(a); setNoteDraft(""); }}>Profile</button>
           </div></td></tr>)}
         </tbody>
       </table>
@@ -239,8 +241,8 @@ export default function AdminDashboard() {
       <div className="bg-white rounded-xl p-6 w-full max-w-2xl space-y-3" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-xl font-semibold">Candidate Profile</h3>
         <p>{selected.user.name} • {selected.user.email} • {selected.phone}</p>
-        <p><a className="underline mr-2" href={selected.linkedin}>LinkedIn</a><a className="underline mr-2" href={selected.github}>GitHub</a>{selected.portfolio && <a className="underline" href={selected.portfolio}>Portfolio</a>}</p>
-        <p><a className="underline" href={selected.resume}>Resume Preview/Download</a></p>
+        <p><a className="underline mr-2" href={selected.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a><a className="underline mr-2" href={selected.github} target="_blank" rel="noopener noreferrer">GitHub</a>{selected.portfolio && <a className="underline" href={selected.portfolio} target="_blank" rel="noopener noreferrer">Portfolio</a>}</p>
+        <p><a className="underline" href={selected.resume} target="_blank" rel="noopener noreferrer">Resume Preview/Download</a></p>
         <div className="grid sm:grid-cols-2 gap-2 text-sm">
           <p><span className="font-medium">Current Location:</span> {selected.location || "—"}</p>
           <p><span className="font-medium">Years of Experience:</span> {selected.yearsExperience || "—"}</p>
@@ -251,7 +253,32 @@ export default function AdminDashboard() {
           <h4 className="font-medium">Cover Letter</h4>
           <p className="text-sm text-zinc-700 whitespace-pre-wrap">{selected.coverLetter || "—"}</p>
         </div>
-        <div><h4 className="font-medium">Notes</h4>{selected.notes.map((n) => <div key={n.id}>• {n.note}</div>)}</div>
+        <div className="space-y-2"><h4 className="font-medium">Notes</h4>{selected.notes.length === 0 && <p className="text-sm text-zinc-500">No notes yet.</p>}{selected.notes.map((n) => <div key={n.id}>• {n.note}</div>)}
+          <form className="flex flex-col sm:flex-row gap-2" onSubmit={async (e) => {
+            e.preventDefault();
+            const note = noteDraft.trim();
+            if (!note) return;
+            setIsSavingNote(true);
+            const res = await fetch(`/api/admin/applications/${selected.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ note }),
+            });
+            setIsSavingNote(false);
+            if (!res.ok) return;
+            setNoteDraft("");
+            setSelected((prev) => prev ? { ...prev, notes: [...prev.notes, { id: `tmp-${Date.now()}`, note }] } : prev);
+            await load();
+          }}>
+            <input
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              className="border rounded p-2 flex-1"
+              placeholder="Write a note about this candidate"
+            />
+            <button type="submit" className="border rounded px-3 py-2" disabled={isSavingNote || !noteDraft.trim()}>{isSavingNote ? "Saving..." : "Add Note"}</button>
+          </form>
+        </div>
       </div>
     </div>}
   </main>;
