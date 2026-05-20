@@ -31,6 +31,9 @@ type AppRow = {
 };
 
 const statusOptions = ["PENDING", "REVIEWING", "SHORTLISTED", "REJECTED", "HIRED"] as const;
+const defaultCategories = ["Web Development", "App Development", "Graphics Design"];
+const experienceOptions = ["Intern", "Fresher", "Mid-level", "Experienced"];
+const employmentTypeOptions = ["Part Time", "Full Time"];
 
 export default function AdminDashboard() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -38,14 +41,29 @@ export default function AdminDashboard() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [selected, setSelected] = useState<AppRow | null>(null);
-  const [jobForm, setJobForm] = useState({ title: "", category: "", description: "", location: "", salary: "", experience: "", employmentType: "Full Time", skills: "" });
+  const [jobForm, setJobForm] = useState({ title: "", category: defaultCategories[0], description: "", location: "", salary: "", experience: experienceOptions[0], employmentType: employmentTypeOptions[1], skills: "" });
+  const [categories, setCategories] = useState<string[]>(defaultCategories);
+  const [skillSuggestions, setSkillSuggestions] = useState<string[]>([]);
 
   const load = async () => {
     const [jobsRes, appsRes] = await Promise.all([
       fetch("/api/admin/jobs", { cache: "no-store" }),
       fetch("/api/admin/applications", { cache: "no-store" }),
     ]);
-    if (jobsRes.ok) setJobs(await jobsRes.json());
+    if (jobsRes.ok) {
+      const loadedJobs: Job[] = await jobsRes.json();
+      setJobs(loadedJobs);
+      const fromJobsCategories = Array.from(new Set(loadedJobs.map((j) => j.category).filter(Boolean)));
+      const fromJobsSkills = Array.from(new Set(loadedJobs.flatMap((j) => j.skills || []).map((s) => s.trim()).filter(Boolean)));
+      const savedCategories = JSON.parse(localStorage.getItem("admin_categories") || "[]") as string[];
+      const savedSkills = JSON.parse(localStorage.getItem("admin_skill_suggestions") || "[]") as string[];
+      const mergedCategories = Array.from(new Set([...defaultCategories, ...fromJobsCategories, ...savedCategories]));
+      const mergedSkills = Array.from(new Set([...fromJobsSkills, ...savedSkills]));
+      setCategories(mergedCategories);
+      setSkillSuggestions(mergedSkills);
+      localStorage.setItem("admin_categories", JSON.stringify(mergedCategories));
+      localStorage.setItem("admin_skill_suggestions", JSON.stringify(mergedSkills));
+    }
     if (appsRes.ok) setApplications(await appsRes.json());
   };
 
@@ -63,9 +81,36 @@ export default function AdminDashboard() {
 
   const addJob = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch("/api/admin/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...jobForm, skills: jobForm.skills.split(",").map((s) => s.trim()).filter(Boolean), isOpen: true }) });
-    setJobForm({ title: "", category: "", description: "", location: "", salary: "", experience: "", employmentType: "Full Time", skills: "" });
+    const parsedSkills = jobForm.skills.split(",").map((s) => s.trim()).filter(Boolean);
+    await fetch("/api/admin/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...jobForm, skills: parsedSkills, isOpen: true }) });
+    const mergedSkills = Array.from(new Set([...skillSuggestions, ...parsedSkills]));
+    setSkillSuggestions(mergedSkills);
+    localStorage.setItem("admin_skill_suggestions", JSON.stringify(mergedSkills));
+    setJobForm({ title: "", category: categories[0] || defaultCategories[0], description: "", location: "", salary: "", experience: experienceOptions[0], employmentType: employmentTypeOptions[1], skills: "" });
     await load();
+  };
+
+  const handleCategoryChange = (value: string) => {
+    if (value !== "__add__") {
+      setJobForm((prev) => ({ ...prev, category: value }));
+      return;
+    }
+    const newCategory = prompt("Add new category")?.trim();
+    if (!newCategory) return;
+    const merged = Array.from(new Set([...categories, newCategory]));
+    setCategories(merged);
+    localStorage.setItem("admin_categories", JSON.stringify(merged));
+    setJobForm((prev) => ({ ...prev, category: newCategory }));
+  };
+
+  const handleSkillsKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const entered = jobForm.skills.split(",").map((s) => s.trim()).filter(Boolean);
+    if (!entered.length) return;
+    const mergedSkills = Array.from(new Set([...skillSuggestions, ...entered]));
+    setSkillSuggestions(mergedSkills);
+    localStorage.setItem("admin_skill_suggestions", JSON.stringify(mergedSkills));
   };
 
   return <main className="container py-10 space-y-6">
@@ -81,12 +126,20 @@ export default function AdminDashboard() {
       <h2 className="font-semibold">Jobs Management</h2>
       <form onSubmit={addJob} className="grid md:grid-cols-4 gap-2">
         <input className="border rounded p-2" placeholder="Title" value={jobForm.title} onChange={(e) => setJobForm({ ...jobForm, title: e.target.value })} required />
-        <input className="border rounded p-2" placeholder="Category" value={jobForm.category} onChange={(e) => setJobForm({ ...jobForm, category: e.target.value })} required />
+        <select className="border rounded p-2" value={jobForm.category} onChange={(e) => handleCategoryChange(e.target.value)}>
+          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+          <option value="__add__">+ Add</option>
+        </select>
         <input className="border rounded p-2" placeholder="Location" value={jobForm.location} onChange={(e) => setJobForm({ ...jobForm, location: e.target.value })} required />
         <input className="border rounded p-2" placeholder="Salary" value={jobForm.salary} onChange={(e) => setJobForm({ ...jobForm, salary: e.target.value })} required />
-        <input className="border rounded p-2" placeholder="Experience" value={jobForm.experience} onChange={(e) => setJobForm({ ...jobForm, experience: e.target.value })} required />
-        <input className="border rounded p-2" placeholder="Employment Type" value={jobForm.employmentType} onChange={(e) => setJobForm({ ...jobForm, employmentType: e.target.value })} required />
-        <input className="border rounded p-2 md:col-span-2" placeholder="Skills comma separated" value={jobForm.skills} onChange={(e) => setJobForm({ ...jobForm, skills: e.target.value })} />
+        <select className="border rounded p-2" value={jobForm.experience} onChange={(e) => setJobForm({ ...jobForm, experience: e.target.value })}>
+          {experienceOptions.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+        <select className="border rounded p-2" value={jobForm.employmentType} onChange={(e) => setJobForm({ ...jobForm, employmentType: e.target.value })}>
+          {employmentTypeOptions.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+        <input className="border rounded p-2 md:col-span-2" placeholder="Skills comma separated" value={jobForm.skills} onChange={(e) => setJobForm({ ...jobForm, skills: e.target.value })} onKeyDown={handleSkillsKeyDown} list="skills-suggestions" />
+        <datalist id="skills-suggestions">{skillSuggestions.map((skill) => <option key={skill} value={skill} />)}</datalist>
         <textarea className="border rounded p-2 md:col-span-4" placeholder="Description" value={jobForm.description} onChange={(e) => setJobForm({ ...jobForm, description: e.target.value })} required />
         <button className="btn-primary md:col-span-1" type="submit">Add Job</button>
       </form>
@@ -132,10 +185,6 @@ export default function AdminDashboard() {
         <p><a className="underline mr-2" href={selected.linkedin}>LinkedIn</a><a className="underline mr-2" href={selected.github}>GitHub</a>{selected.portfolio && <a className="underline" href={selected.portfolio}>Portfolio</a>}</p>
         <p><a className="underline" href={selected.resume}>Resume Preview/Download</a></p>
         <div><h4 className="font-medium">Notes</h4>{selected.notes.map((n) => <div key={n.id}>• {n.note}</div>)}</div>
-        <form onSubmit={async (e) => { e.preventDefault(); const note = (new FormData(e.currentTarget).get("note") as string) || ""; if (!note.trim()) return; await fetch(`/api/admin/applications/${selected.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: selected.status, note }) }); setSelected(null); await load(); }} className="flex gap-2">
-          <input name="note" className="border rounded p-2 flex-1" placeholder="Internal recruiter comment" />
-          <button className="btn-primary" type="submit">Add Note</button>
-        </form>
       </div>
     </div>}
   </main>;
