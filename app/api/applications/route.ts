@@ -52,8 +52,6 @@ export async function POST(req: Request) {
   const bytes = await resume.arrayBuffer();
   const buffer = Buffer.from(bytes);
   const storedName = `${Date.now()}-${sanitizeFileName(fileName)}`;
-  const resumeBase64 = buffer.toString('base64');
-  const resumePath = `data:${resume.type};name=${encodeURIComponent(storedName)};base64,${resumeBase64}`;
 
   try {
     const uploadDir = join(process.cwd(), 'public', 'uploads', 'resumes');
@@ -61,7 +59,6 @@ export async function POST(req: Request) {
     await writeFile(join(uploadDir, storedName), buffer);
   } catch {
     // Optional best-effort local write only.
-    // In serverless deployments the filesystem may be read-only or ephemeral.
   }
 
   const user = await prisma.user.upsert({
@@ -83,9 +80,18 @@ export async function POST(req: Request) {
       linkedin,
       github,
       portfolio: portfolio || null,
-      resume: resumePath,
+      // Keep legacy column populated with a durable marker.
+      resume: `dbasset:${storedName}`,
       status: 'PENDING',
+      resumeAsset: {
+        create: {
+          fileName: storedName,
+          contentType: resume.type || 'application/octet-stream',
+          data: buffer,
+        },
+      },
     },
+    select: { id: true },
   });
 
   return NextResponse.json({ ok: true, applicationId: application.id });

@@ -63,11 +63,22 @@ const mimeFromPath = (path: string) => {
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const application = await prisma.application.findUnique({
     where: { id: params.id },
-    select: { id: true, resume: true },
+    select: { id: true, resume: true, resumeAsset: { select: { fileName: true, contentType: true, data: true } } },
   });
 
   if (!application?.resume) {
     return NextResponse.json({ error: 'Resume not found for this application.' }, { status: 404 });
+  }
+
+
+  if (application.resumeAsset) {
+    return new NextResponse(new Uint8Array(application.resumeAsset.data), {
+      headers: {
+        'Content-Type': application.resumeAsset.contentType || 'application/octet-stream',
+        'Content-Disposition': `inline; filename="${application.resumeAsset.fileName || 'resume'}"`,
+        'Cache-Control': 'private, no-store',
+      },
+    });
   }
 
   const resume = application.resume;
@@ -77,7 +88,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   const parsedDataResume = parseStoredDataResume(resume);
   if (parsedDataResume) {
-    return new NextResponse(parsedDataResume.file, {
+    return new NextResponse(new Uint8Array(parsedDataResume.file), {
       headers: {
         'Content-Type': parsedDataResume.contentType,
         'Content-Disposition': `inline; filename="${parsedDataResume.fileName}"`,
@@ -109,7 +120,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     // Non-blocking: download should still succeed even if backfill fails.
   });
 
-  return new NextResponse(file, {
+  return new NextResponse(new Uint8Array(file), {
     headers: {
       'Content-Type': inferredType,
       'Content-Disposition': `inline; filename="${publicPath.split('/').pop() || 'resume'}"`,
