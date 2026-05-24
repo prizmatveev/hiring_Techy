@@ -73,28 +73,70 @@ export async function uploadResumeToUploadThing(file: File, customId: string) {
   }
   const apiKey = decodeUploadThingApiKey(normalizedToken);
 
-  const uploadRes = await fetch('https://uploadthing.com/api/uploadFiles', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-uploadthing-api-key': apiKey,
-    },
-    body: JSON.stringify({
-      files: [
-        {
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          customId,
-        },
-      ],
-    }),
+  const requestBody = JSON.stringify({
+    files: [
+      {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        customId,
+      },
+    ],
   });
 
-  if (!uploadRes.ok) {
-    const body = await uploadRes.text();
+  const presignAttempts = [
+    {
+      label: 'api-host-with-key-header',
+      url: 'https://api.uploadthing.com/v6/uploadFiles',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-uploadthing-api-key': apiKey,
+        'x-uploadthing-version': '7.0.0',
+        'x-uploadthing-package': 'resume-uploader',
+      },
+    },
+    {
+      label: 'legacy-host-with-key-header',
+      url: 'https://uploadthing.com/api/uploadFiles',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-uploadthing-api-key': apiKey,
+      },
+    },
+    {
+      label: 'api-host-with-bearer',
+      url: 'https://api.uploadthing.com/v6/uploadFiles',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'x-uploadthing-version': '7.0.0',
+        'x-uploadthing-package': 'resume-uploader',
+      },
+    },
+  ] as const;
+
+  let uploadRes: Response | null = null;
+  let failureDetails = '';
+
+  for (const attempt of presignAttempts) {
+    const res = await fetch(attempt.url, {
+      method: 'POST',
+      headers: attempt.headers,
+      body: requestBody,
+    });
+
+    if (res.ok) {
+      uploadRes = res;
+      break;
+    }
+
+    const failureBody = await res.text();
+    failureDetails += `${attempt.label}:${res.status}:${failureBody} | `;
+  }
+
+  if (!uploadRes) {
     const debug = safeTokenDebug(process.env.UPLOADTHING_TOKEN);
-    throw new Error(`UploadThing presign failed: ${uploadRes.status} ${body}. tokenDebug=${JSON.stringify(debug)}`);
+    throw new Error(`UploadThing presign failed across attempts. details=${failureDetails} tokenDebug=${JSON.stringify(debug)}`);
   }
 
   const payload = (await uploadRes.json()) as PresignedUpload[] | { data?: PresignedUpload[] };
