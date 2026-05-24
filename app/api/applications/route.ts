@@ -24,19 +24,8 @@ export async function POST(req: Request) {
   const portfolio = String(form.get('portfolio') || '');
   const resume = form.get('resume');
 
-  if (!jobId || !fullName || !email || !phone || !linkedin || !github || !(resume instanceof File)) {
+  if (!jobId || !fullName || !email || !phone || !linkedin || !github) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-  }
-
-  const fileName = resume.name || 'resume.pdf';
-  const ext = fileName.includes('.') ? `.${fileName.split('.').pop()?.toLowerCase()}` : '';
-
-  if (!RESUME_ALLOWED_MIME_TYPES.has(resume.type) || !RESUME_ALLOWED_EXTENSIONS.has(ext)) {
-    return NextResponse.json({ error: 'Only PDF, DOC, and DOCX resume files are allowed.' }, { status: 400 });
-  }
-
-  if (resume.size <= 0 || resume.size > MAX_RESUME_SIZE_BYTES) {
-    return NextResponse.json({ error: 'Resume file must be between 1 byte and 8MB.' }, { status: 400 });
   }
 
   const user = await prisma.user.upsert({
@@ -45,31 +34,45 @@ export async function POST(req: Request) {
     create: { name: fullName, email, role: 'CANDIDATE' },
   });
 
+  const hasResume = resume instanceof File;
   // UploadThing is the only write path for new resume documents.
-  const uploadName = `${Date.now()}-${sanitizeResumeFileName(fileName)}`;
+  const fileName = hasResume ? (resume.name || 'resume.pdf') : null;
+  const uploadName = hasResume ? `${Date.now()}-${sanitizeResumeFileName(fileName || 'resume.pdf')}` : '';
   let uploadedUrl = '';
   let uploadedKey = '';
 
-  try {
-    const result = await uploadResumeToUploadThing(new File([resume], uploadName, { type: resume.type || 'application/pdf' }), uploadName);
+  if (hasResume) {
+    const ext = fileName && fileName.includes('.') ? `.${fileName.split('.').pop()?.toLowerCase()}` : '';
 
-    if (!result.url || !result.key) {
-      console.error('[applications] UploadThing returned missing url/key:', result);
-      return NextResponse.json({ error: 'Resume upload response was invalid.' }, { status: 502 });
+    if (!RESUME_ALLOWED_MIME_TYPES.has(resume.type) || !RESUME_ALLOWED_EXTENSIONS.has(ext)) {
+      return NextResponse.json({ error: 'Only PDF, DOC, and DOCX resume files are allowed.' }, { status: 400 });
     }
 
-    uploadedUrl = result.url;
-    uploadedKey = result.key;
-  } catch (error) {
-    console.error('[applications] UploadThing API exception:', error);
-    const message = error instanceof Error ? error.message : 'Unexpected resume upload failure.';
-    return NextResponse.json(
-      {
-        error: `Unexpected resume upload failure: ${message}`,
-        hint: 'Verify Vercel env var UPLOADTHING_TOKEN is raw token only (no quotes, no UPLOADTHING_TOKEN= prefix), then redeploy.',
-      },
-      { status: 502 },
-    );
+    if (resume.size <= 0 || resume.size > MAX_RESUME_SIZE_BYTES) {
+      return NextResponse.json({ error: 'Resume file must be between 1 byte and 8MB.' }, { status: 400 });
+    }
+
+    try {
+      const result = await uploadResumeToUploadThing(new File([resume], uploadName, { type: resume.type || 'application/pdf' }), uploadName);
+
+      if (!result.url || !result.key) {
+        console.error('[applications] UploadThing returned missing url/key:', result);
+        return NextResponse.json({ error: 'Resume upload response was invalid.' }, { status: 502 });
+      }
+
+      uploadedUrl = result.url;
+      uploadedKey = result.key;
+    } catch (error) {
+      console.error('[applications] UploadThing API exception:', error);
+      const message = error instanceof Error ? error.message : 'Unexpected resume upload failure.';
+      return NextResponse.json(
+        {
+          error: `Unexpected resume upload failure: ${message}`,
+          hint: 'Verify Vercel env var UPLOADTHING_TOKEN is raw token only (no quotes, no UPLOADTHING_TOKEN= prefix), then redeploy.',
+        },
+        { status: 502 },
+      );
+    }
   }
 
   const application = await prisma.application.create({
@@ -86,11 +89,11 @@ export async function POST(req: Request) {
       github,
       portfolio: portfolio || null,
       // Keep legacy column for backward compatibility while shifting reads to dedicated fields.
-      resume: uploadedUrl,
-      resumeFileUrl: uploadedUrl,
-      resumeFileKey: uploadedKey,
+      resume: uploadedUrl || 'NO_RESUME_SUBMITTED',
+      resumeFileUrl: uploadedUrl || null,
+      resumeFileKey: uploadedKey || null,
       resumeFileName: fileName,
-      resumeMimeType: resume.type || 'application/pdf',
+      resumeMimeType: hasResume ? (resume.type || 'application/pdf') : null,
       status: 'PENDING',
     },
     select: { id: true },
