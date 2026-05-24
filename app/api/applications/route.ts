@@ -51,11 +51,15 @@ export async function POST(req: Request) {
 
   const bytes = await resume.arrayBuffer();
   const buffer = Buffer.from(bytes);
-  const uploadDir = join(process.cwd(), 'public', 'uploads', 'resumes');
-  await mkdir(uploadDir, { recursive: true });
   const storedName = `${Date.now()}-${sanitizeFileName(fileName)}`;
-  await writeFile(join(uploadDir, storedName), buffer);
-  const resumePath = `/uploads/resumes/${storedName}`;
+
+  try {
+    const uploadDir = join(process.cwd(), 'public', 'uploads', 'resumes');
+    await mkdir(uploadDir, { recursive: true });
+    await writeFile(join(uploadDir, storedName), buffer);
+  } catch {
+    // Optional best-effort local write only.
+  }
 
   const user = await prisma.user.upsert({
     where: { email },
@@ -76,9 +80,18 @@ export async function POST(req: Request) {
       linkedin,
       github,
       portfolio: portfolio || null,
-      resume: resumePath,
+      // Keep legacy column populated with a durable marker.
+      resume: `dbasset:${storedName}`,
       status: 'PENDING',
+      resumeAsset: {
+        create: {
+          fileName: storedName,
+          contentType: resume.type || 'application/octet-stream',
+          data: buffer,
+        },
+      },
     },
+    select: { id: true },
   });
 
   return NextResponse.json({ ok: true, applicationId: application.id });
