@@ -15,6 +15,28 @@ const toPublicResumePath = (resume: string) => {
   return `/uploads/resumes/${normalized.split('/').pop() ?? normalized}`;
 };
 
+
+const parseStoredDataResume = (resume: string) => {
+  if (!resume.startsWith('data:') || !resume.includes(';base64,')) return null;
+
+  const [meta, base64] = resume.split(';base64,');
+  const metaWithoutPrefix = meta.slice('data:'.length);
+  const [contentType, ...params] = metaWithoutPrefix.split(';');
+  const fileNameParam = params.find((part) => part.startsWith('name='));
+  const fileName = fileNameParam ? decodeURIComponent(fileNameParam.replace(/^name=/, '')) : 'resume';
+
+  try {
+    const file = Buffer.from(base64, 'base64');
+    return {
+      file,
+      contentType: contentType || 'application/octet-stream',
+      fileName,
+    };
+  } catch {
+    return null;
+  }
+};
+
 const mimeFromPath = (path: string) => {
   const ext = path.toLowerCase().split('.').pop() ?? '';
   switch (ext) {
@@ -46,6 +68,17 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const resume = application.resume;
   if (resume.startsWith('http://') || resume.startsWith('https://')) {
     return NextResponse.redirect(resume);
+  }
+
+  const parsedDataResume = parseStoredDataResume(resume);
+  if (parsedDataResume) {
+    return new NextResponse(parsedDataResume.file, {
+      headers: {
+        'Content-Type': parsedDataResume.contentType,
+        'Content-Disposition': `inline; filename="${parsedDataResume.fileName}"`,
+        'Cache-Control': 'private, no-store',
+      },
+    });
   }
 
   const publicPath = toPublicResumePath(resume);
